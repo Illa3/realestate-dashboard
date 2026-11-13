@@ -159,12 +159,11 @@ async function loadDashboard() {
 
     return `
       <div class="card">
-        <h2 class="tx-toggle" data-target-id="${t.id}" style="cursor:pointer">
-          ${t.name} <span class="badge">${TYPE_LABEL[t.type] || t.type}</span>
-          <span class="muted" style="margin-left:auto;font-size:12px">실거래가 ▾</span>
-        </h2>
+        <h2>${t.name} <span class="badge">${TYPE_LABEL[t.type] || t.type}</span></h2>
         ${alertHtml}
+        <p class="muted" style="margin:8px 0 2px">매물 (업로드한 캡처)</p>
         ${listingHtml}
+        <button class="ghost tx-toggle" data-target-id="${t.id}" style="margin-top:8px">실거래가(최근 6개월) 보기 ▾</button>
         <div class="tx-summary" id="tx-${t.id}" hidden></div>
       </div>
     `;
@@ -172,18 +171,23 @@ async function loadDashboard() {
 
   dashboardEl.innerHTML = auctionCard + (cards.join("") || `<p class="muted">등록된 단지가 없습니다. 관리 탭에서 추가하세요.</p>`);
 
-  dashboardEl.querySelectorAll(".tx-toggle").forEach(el => {
-    el.onclick = () => toggleTxSummary(el.dataset.targetId);
+  dashboardEl.querySelectorAll(".tx-toggle").forEach(btn => {
+    btn.onclick = () => toggleTxSummary(btn.dataset.targetId, btn);
   });
 }
 
 const txCache = {};
 
-async function toggleTxSummary(targetId) {
+async function toggleTxSummary(targetId, btn) {
   const el = document.getElementById(`tx-${targetId}`);
   if (!el) return;
-  if (!el.hidden) { el.hidden = true; return; }
+  if (!el.hidden) {
+    el.hidden = true;
+    if (btn) btn.textContent = "실거래가(최근 6개월) 보기 ▾";
+    return;
+  }
   el.hidden = false;
+  if (btn) btn.textContent = "실거래가 접기 ▴";
 
   if (txCache[targetId]) { el.innerHTML = txCache[targetId]; return; }
   el.innerHTML = `<p class="muted">불러오는 중...</p>`;
