@@ -8,7 +8,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -21,6 +21,7 @@ jobs:
 
       - name: Run scraper
         env:
+          PYTHONUNBUFFERED: "1"
           MOLIT_SERVICE_KEY: ${{ secrets.MOLIT_SERVICE_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

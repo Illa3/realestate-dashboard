@@ -7,6 +7,7 @@
 3. 입찰일이 임박한 관심 경매물건을 텔레그램으로 알린다.
 """
 
+import time
 from datetime import date
 
 from . import auction_reminders, db, molit_client, process_captures
@@ -50,11 +51,13 @@ def process_apartment_or_commercial(target: dict) -> None:
 
     trade_count = 0
     for ymd in _recent_deal_ymds():
+        t0 = time.monotonic()
         try:
             batch = fetch_fn(target["lawd_cd"], ymd)
         except Exception as e:  # noqa: BLE001
-            print(f"[molit] {target['name']} {ymd} 조회 실패: {e}")
+            print(f"[molit] {target['name']} {ymd} 조회 실패 ({time.monotonic()-t0:.1f}s): {e}")
             continue
+        print(f"[molit] {target['name']} {ymd}: {len(batch)}건 ({time.monotonic()-t0:.1f}s)")
         trade_count += len(batch)
         _insert_trades(target["id"], source, batch)
 
@@ -67,11 +70,13 @@ def process_redevelopment(target: dict) -> None:
     trade_count = 0
     for source, fetch_fn in sources:
         for ymd in _recent_deal_ymds():
+            t0 = time.monotonic()
             try:
                 batch = fetch_fn(target["lawd_cd"], ymd)
             except Exception as e:  # noqa: BLE001
-                print(f"[molit:{source}] {target['name']} {ymd} 조회 실패: {e}")
+                print(f"[molit:{source}] {target['name']} {ymd} 조회 실패 ({time.monotonic()-t0:.1f}s): {e}")
                 continue
+            print(f"[molit:{source}] {target['name']} {ymd}: {len(batch)}건 ({time.monotonic()-t0:.1f}s)")
             trade_count += len(batch)
             _insert_trades(target["id"], source, batch)
 

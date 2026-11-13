@@ -30,7 +30,7 @@ def _fetch(endpoint: str, lawd_cd: str, deal_ymd: str) -> list[dict]:
             "numOfRows": 1000,
             "pageNo": 1,
         },
-        timeout=20,
+        timeout=10,
     )
     resp.raise_for_status()
     root = ET.fromstring(resp.text)
