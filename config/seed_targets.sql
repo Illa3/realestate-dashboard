@@ -1,5 +1,5 @@
 -- 초기 관심 단지/구역 등록 (schema.sql 실행 후, Supabase SQL Editor에서 실행)
--- 주의: lawd_cd(법정동코드 5자리)는 https://www.code.go.kr/stdcode/regCodeL.do 에서 다시 한 번 확인하세요.
+-- lawd_cd(법정동코드 5자리)는 행정표준코드관리시스템(code.go.kr)에서 확인 완료.
 
 insert into targets (name, type, lawd_cd, discount_threshold_pct, memo) values
   ('잠실 엘스', 'apartment', '11710', 10, '송파구 잠실동'),
