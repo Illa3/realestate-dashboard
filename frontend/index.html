@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>관심구역 부동산 대시보드</title>
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg: #f7f7f8; --card: #ffffff; --text: #1a1a1a; --muted: #6b7280;
+    --accent: #d0392b; --border: #e5e7eb; --badge: #eef2ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15161a; --card: #1f2024; --text: #ececec; --muted: #9aa0a6; --border: #2d2f34; --badge: #2a2d3a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  header { padding: 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 10; }
+  h1 { font-size: 17px; margin: 0; }
+  nav { display: flex; gap: 6px; }
+  nav button { border: 1px solid var(--border); background: var(--card); color: var(--text); padding: 8px 14px; border-radius: 8px; font-size: 14px; }
+  nav button.active { background: var(--accent); color: white; border-color: var(--accent); }
+  main { padding: 12px; max-width: 720px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .card h2 { font-size: 15px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--badge); color: var(--muted); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .alert { background: #fdecea; color: var(--accent); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-top: 6px; }
+  @media (prefers-color-scheme: dark) { .alert { background: #3a2422; } }
+  .listing-row { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-top: 1px solid var(--border); }
+  .listing-row:first-child { border-top: none; }
+  form.inline { display: flex; flex-direction: column; gap: 8px; }
+  input, select { padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); font-size: 14px; }
+  button.primary { background: var(--accent); color: white; border: none; padding: 9px 14px; border-radius: 8px; font-size: 14px; }
+  button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 8px; font-size: 12px; }
+  .row-actions { display: flex; gap: 6px; margin-top: 8px; }
+  #manage-view[hidden], #dashboard-view[hidden] { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏠 관심구역 대시보드</h1>
+  <nav>
+    <button id="tab-dashboard" class="active">대시보드</button>
+    <button id="tab-manage">관리</button>
+  </nav>
+</header>
+
+<main id="dashboard-view"></main>
+<main id="manage-view" hidden></main>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
+
+const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+const dashboardEl = document.getElementById("dashboard-view");
+const manageEl = document.getElementById("manage-view");
+const tabDashboard = document.getElementById("tab-dashboard");
+const tabManage = document.getElementById("tab-manage");
+
+const TYPE_LABEL = { apartment: "아파트", commercial: "상가", redevelopment: "재개발" };
+const REASON_LABEL = {
+  below_median: "실거래가 대비 저가",
+  price_drop: "호가 인하",
+  keyword: "급매 키워드",
+  premium_low: "감정가 대비 저가",
+};
+
+function won(n) {
+  if (n == null) return "-";
+  const eok = Math.floor(n / 100000000);
+  const rest = Math.round((n % 100000000) / 10000);
+  return eok > 0 ? `${eok}억 ${rest ? rest.toLocaleString() + "만" : ""}` : `${rest.toLocaleString()}만`;
+}
+
+function showTab(name) {
+  const isDash = name === "dashboard";
+  dashboardEl.hidden = !isDash;
+  manageEl.hidden = isDash;
+  tabDashboard.classList.toggle("active", isDash);
+  tabManage.classList.toggle("active", !isDash);
+  if (isDash) loadDashboard(); else loadManage();
+}
+tabDashboard.onclick = () => showTab("dashboard");
+tabManage.onclick = () => showTab("manage");
+
+async function loadDashboard() {
+  dashboardEl.innerHTML = `<p class="muted">불러오는 중...</p>`;
+  const { data: targets, error } = await supabase
+    .from("targets").select("*").eq("active", true).order("name");
+  if (error) { dashboardEl.innerHTML = `<p class="alert">${error.message}</p>`; return; }
+
+  const cards = await Promise.all(targets.map(async (t) => {
+    const [{ data: listings }, { data: alerts }] = await Promise.all([
+      supabase.from("listings").select("*").eq("target_id", t.id).eq("is_active", true).order("price").limit(8),
+      supabase.from("alerts").select("*").eq("target_id", t.id).order("created_at", { ascending: false }).limit(5),
+    ]);
+
+    const alertHtml = (alerts || []).map(a => `
+      <div class="alert">🚨 ${REASON_LABEL[a.reason] || a.reason} — ${new Date(a.created_at).toLocaleString("ko-KR")}</div>
+    `).join("");
+
+    const listingHtml = (listings || []).map(l => `
+      <div class="listing-row"><span>${l.floor_info || ""} ${l.area_m2 ? Math.round(l.area_m2) + "㎡" : ""}</span><span>${won(l.price)}</span></div>
+    `).join("") || `<p class="muted">매물 없음</p>`;
+
+    return `
+      <div class="card">
+        <h2>${t.name} <span class="badge">${TYPE_LABEL[t.type] || t.type}</span></h2>
+        ${alertHtml}
+        ${listingHtml}
+      </div>
+    `;
+  }));
+
+  dashboardEl.innerHTML = cards.join("") || `<p class="muted">등록된 단지가 없습니다. 관리 탭에서 추가하세요.</p>`;
+}
+
+async function loadManage() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    manageEl.innerHTML = `
+      <div class="card">
+        <h2>로그인</h2>
+        <form class="inline" id="login-form">
+          <input type="email" id="login-email" placeholder="이메일" required />
+          <input type="password" id="login-password" placeholder="비밀번호" required />
+          <button class="primary" type="submit">로그인</button>
+        </form>
+        <p class="muted">Supabase Authentication에서 본인 계정을 먼저 만들어두세요.</p>
+      </div>`;
+    document.getElementById("login-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("login-email").value;
+      const password = document.getElementById("login-password").value;
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) alert(error.message); else loadManage();
+    };
+    return;
+  }
+
+  const { data: targets } = await supabase.from("targets").select("*").order("name");
+
+  manageEl.innerHTML = `
+    <div class="card">
+      <h2>새 단지/구역 추가</h2>
+      <form class="inline" id="add-form">
+        <input id="f-name" placeholder="이름 (예: 잠실 엘스)" required />
+        <select id="f-type">
+          <option value="apartment">아파트</option>
+          <option value="commercial">상가</option>
+          <option value="redevelopment">재개발구역</option>
+        </select>
+        <input id="f-lawd" placeholder="법정동코드 5자리 (예: 11710)" required />
+        <input id="f-threshold" type="number" placeholder="급매 판정 기준 % (기본 10)" value="10" />
+        <button class="primary" type="submit">추가</button>
+      </form>
+    </div>
+    ${(targets || []).map(t => `
+      <div class="card">
+        <h2>${t.name} <span class="badge">${TYPE_LABEL[t.type] || t.type}</span> ${t.active ? "" : '<span class="badge">비활성</span>'}</h2>
+        <p class="muted">법정동코드 ${t.lawd_cd} · 기준 ${t.discount_threshold_pct}%</p>
+        <div class="row-actions">
+          <button class="ghost" data-action="toggle" data-id="${t.id}" data-active="${t.active}">${t.active ? "비활성화" : "활성화"}</button>
+          <button class="ghost" data-action="delete" data-id="${t.id}">삭제</button>
+        </div>
+      </div>
+    `).join("")}
+    <button class="ghost" id="logout">로그아웃</button>
+  `;
+
+  document.getElementById("add-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const { error } = await supabase.from("targets").insert({
+      name: document.getElementById("f-name").value,
+      type: document.getElementById("f-type").value,
+      lawd_cd: document.getElementById("f-lawd").value,
+      discount_threshold_pct: Number(document.getElementById("f-threshold").value) || 10,
+    });
+    if (error) alert(error.message); else loadManage();
+  };
+
+  manageEl.querySelectorAll("[data-action]").forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      if (btn.dataset.action === "toggle") {
+        await supabase.from("targets").update({ active: btn.dataset.active !== "true" }).eq("id", id);
+      } else if (btn.dataset.action === "delete") {
+        if (!confirm("정말 삭제하시겠어요? 관련 매물/이력도 함께 삭제됩니다.")) return;
+        await supabase.from("targets").delete().eq("id", id);
+      }
+      loadManage();
+    };
+  });
+
+  document.getElementById("logout").onclick = async () => {
+    await supabase.auth.signOut();
+    loadManage();
+  };
+}
+
+loadDashboard();
+</script>
+</body>
+</html>
