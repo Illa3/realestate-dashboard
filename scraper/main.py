@@ -36,8 +36,12 @@ def _first(t: dict, *keys: str, default=None):
 
 
 def _matches_location(t: dict, target: dict) -> bool:
-    """target에 dong_name/jibun이 지정돼 있으면 그 동·지번 거래만 통과시킨다.
-    (예: 신천동 장미아파트 상가처럼 구 전체 조회로는 범위가 너무 넓은 경우)"""
+    """target에 apt_name/dong_name/jibun이 지정돼 있으면 그 단지(또는 동·지번) 거래만
+    통과시킨다. LAWD_CD 조회는 구 전체를 가져오기 때문에 안 걸러내면 단지가 전혀
+    다른 아파트/상가 수백 곳의 거래가 다 섞인다."""
+    apt_name = target.get("apt_name")
+    if apt_name and _first(t, "단지명", "aptNm") != apt_name:
+        return False
     dong = target.get("dong_name")
     if dong and _first(t, "법정동", "umdNm") != dong:
         return False

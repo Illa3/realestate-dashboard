@@ -16,6 +16,7 @@ create table if not exists targets (
   appraisal_value bigint,                      -- 재개발구역: 감정가 (총투자금 계산용, 평당 또는 호별)
   dong_name text,                               -- 상가 등: 국토부 API 응답의 법정동명(umdNm)과 일치해야 할 값 (구 전체로 범위가 너무 넓을 때 좁히는 용도)
   jibun text,                                   -- 상가 등: 국토부 API 응답의 지번(jibun)과 일치해야 할 값
+  apt_name text,                                -- 아파트: 국토부 API 응답의 단지명(aptNm)과 정확히 일치해야 할 값. 안 채우면 그 구 전체 아파트 거래가 다 섞임
   active boolean not null default true,
   memo text,
   created_at timestamptz not null default now(),
