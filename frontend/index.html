@@ -34,7 +34,10 @@
   button.primary { background: var(--accent); color: white; border: none; padding: 9px 14px; border-radius: 8px; font-size: 14px; }
   button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 8px; font-size: 12px; }
   .row-actions { display: flex; gap: 6px; margin-top: 8px; }
-  #manage-view[hidden], #dashboard-view[hidden] { display: none; }
+  #manage-view[hidden], #dashboard-view[hidden], #upload-view[hidden] { display: none; }
+  .status-pending { color: #b45309; }
+  .status-processed { color: #15803d; }
+  .status-error { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -42,11 +45,13 @@
   <h1>🏠 관심구역 대시보드</h1>
   <nav>
     <button id="tab-dashboard" class="active">대시보드</button>
+    <button id="tab-upload">업로드</button>
     <button id="tab-manage">관리</button>
   </nav>
 </header>
 
 <main id="dashboard-view"></main>
+<main id="upload-view" hidden></main>
 <main id="manage-view" hidden></main>
 
 <script type="module">
@@ -56,8 +61,10 @@ const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
 const dashboardEl = document.getElementById("dashboard-view");
 const manageEl = document.getElementById("manage-view");
+const uploadEl = document.getElementById("upload-view");
 const tabDashboard = document.getElementById("tab-dashboard");
 const tabManage = document.getElementById("tab-manage");
+const tabUpload = document.getElementById("tab-upload");
 
 const TYPE_LABEL = { apartment: "아파트", commercial: "상가", redevelopment: "재개발" };
 const REASON_LABEL = {
@@ -74,22 +81,67 @@ function won(n) {
   return eok > 0 ? `${eok}억 ${rest ? rest.toLocaleString() + "만" : ""}` : `${rest.toLocaleString()}만`;
 }
 
+function dDay(dateStr) {
+  if (!dateStr) return "";
+  const diff = Math.ceil((new Date(dateStr) - new Date(new Date().toDateString())) / 86400000);
+  if (diff === 0) return "D-day";
+  return diff > 0 ? `D-${diff}` : `D+${-diff}`;
+}
+
 function showTab(name) {
-  const isDash = name === "dashboard";
-  dashboardEl.hidden = !isDash;
-  manageEl.hidden = isDash;
-  tabDashboard.classList.toggle("active", isDash);
-  tabManage.classList.toggle("active", !isDash);
-  if (isDash) loadDashboard(); else loadManage();
+  dashboardEl.hidden = name !== "dashboard";
+  uploadEl.hidden = name !== "upload";
+  manageEl.hidden = name !== "manage";
+  tabDashboard.classList.toggle("active", name === "dashboard");
+  tabUpload.classList.toggle("active", name === "upload");
+  tabManage.classList.toggle("active", name === "manage");
+  if (name === "dashboard") loadDashboard();
+  else if (name === "upload") loadUpload();
+  else loadManage();
 }
 tabDashboard.onclick = () => showTab("dashboard");
+tabUpload.onclick = () => showTab("upload");
 tabManage.onclick = () => showTab("manage");
+
+async function renderLoginForm(container, onSuccess) {
+  container.innerHTML = `
+    <div class="card">
+      <h2>로그인</h2>
+      <form class="inline" id="login-form">
+        <input type="email" id="login-email" placeholder="이메일" required />
+        <input type="password" id="login-password" placeholder="비밀번호" required />
+        <button class="primary" type="submit">로그인</button>
+      </form>
+    </div>`;
+  container.querySelector("#login-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const email = container.querySelector("#login-email").value;
+    const password = container.querySelector("#login-password").value;
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert(error.message); else onSuccess();
+  };
+}
 
 async function loadDashboard() {
   dashboardEl.innerHTML = `<p class="muted">불러오는 중...</p>`;
   const { data: targets, error } = await supabase
     .from("targets").select("*").eq("active", true).order("name");
   if (error) { dashboardEl.innerHTML = `<p class="alert">${error.message}</p>`; return; }
+
+  const { data: auctions } = await supabase
+    .from("auction_items").select("*").eq("status", "upcoming")
+    .not("bid_date", "is", null).order("bid_date").limit(10);
+
+  const auctionCard = (auctions && auctions.length) ? `
+    <div class="card">
+      <h2>⚖️ 관심 경매물건</h2>
+      ${auctions.map(a => `
+        <div class="listing-row">
+          <span>${a.title || a.case_number} <span class="badge">${dDay(a.bid_date)}</span></span>
+          <span>${won(a.min_bid_price)}</span>
+        </div>
+      `).join("")}
+    </div>` : "";
 
   const cards = await Promise.all(targets.map(async (t) => {
     const [{ data: listings }, { data: alerts }] = await Promise.all([
@@ -114,31 +166,76 @@ async function loadDashboard() {
     `;
   }));
 
-  dashboardEl.innerHTML = cards.join("") || `<p class="muted">등록된 단지가 없습니다. 관리 탭에서 추가하세요.</p>`;
+  dashboardEl.innerHTML = auctionCard + (cards.join("") || `<p class="muted">등록된 단지가 없습니다. 관리 탭에서 추가하세요.</p>`);
+}
+
+async function loadUpload() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) { renderLoginForm(uploadEl, loadUpload); return; }
+
+  const { data: targets } = await supabase.from("targets").select("id,name").order("name");
+  const { data: recent } = await supabase
+    .from("captures").select("*").order("created_at", { ascending: false }).limit(10);
+
+  const statusLabel = { pending: "처리 대기중", processed: "정리 완료", error: "실패" };
+
+  uploadEl.innerHTML = `
+    <div class="card">
+      <h2>매물/경매 캡처 업로드</h2>
+      <form class="inline" id="upload-form">
+        <select id="u-kind">
+          <option value="listing">매물</option>
+          <option value="auction">경매물건</option>
+        </select>
+        <select id="u-target">
+          <option value="">(연결할 단지/구역 선택, 경매는 선택사항)</option>
+          ${(targets || []).map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
+        </select>
+        <input type="file" id="u-file" accept="image/*" required />
+        <button class="primary" type="submit">업로드</button>
+      </form>
+      <p class="muted">업로드하면 다음 자동 실행(최대 30분 이내) 때 Claude Vision이 읽어서 자동으로 정리해요.</p>
+    </div>
+    <div class="card">
+      <h2>최근 업로드</h2>
+      ${(recent || []).map(c => `
+        <div class="listing-row">
+          <span>${c.kind === "listing" ? "매물" : "경매"} · ${new Date(c.created_at).toLocaleString("ko-KR")}</span>
+          <span class="status-${c.status}">${statusLabel[c.status] || c.status}</span>
+        </div>
+      `).join("") || `<p class="muted">업로드 내역 없음</p>`}
+    </div>
+    <button class="ghost" id="logout-upload">로그아웃</button>
+  `;
+
+  document.getElementById("upload-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const file = document.getElementById("u-file").files[0];
+    if (!file) return;
+    const kind = document.getElementById("u-kind").value;
+    const targetId = document.getElementById("u-target").value || null;
+    const path = `uploads/${Date.now()}-${file.name}`;
+
+    const { error: uploadError } = await supabase.storage.from("captures").upload(path, file);
+    if (uploadError) { alert(uploadError.message); return; }
+
+    const { error: insertError } = await supabase
+      .from("captures").insert({ kind, image_path: path, target_id: targetId });
+    if (insertError) { alert(insertError.message); return; }
+
+    alert("업로드 완료! 다음 자동 실행 때 정리됩니다.");
+    loadUpload();
+  };
+
+  document.getElementById("logout-upload").onclick = async () => {
+    await supabase.auth.signOut();
+    loadUpload();
+  };
 }
 
 async function loadManage() {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    manageEl.innerHTML = `
-      <div class="card">
-        <h2>로그인</h2>
-        <form class="inline" id="login-form">
-          <input type="email" id="login-email" placeholder="이메일" required />
-          <input type="password" id="login-password" placeholder="비밀번호" required />
-          <button class="primary" type="submit">로그인</button>
-        </form>
-        <p class="muted">Supabase Authentication에서 본인 계정을 먼저 만들어두세요.</p>
-      </div>`;
-    document.getElementById("login-form").onsubmit = async (e) => {
-      e.preventDefault();
-      const email = document.getElementById("login-email").value;
-      const password = document.getElementById("login-password").value;
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert(error.message); else loadManage();
-    };
-    return;
-  }
+  if (!session) { renderLoginForm(manageEl, loadManage); return; }
 
   const { data: targets } = await supabase.from("targets").select("*").order("name");
 

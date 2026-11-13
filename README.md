@@ -1,11 +1,17 @@
 # 관심구역 부동산 대시보드
 
-네이버 부동산 매물 + 국토부 실거래가를 30분마다 모아서 급매를 감지하고,
-폰 브라우저로 볼 수 있는 대시보드 + 텔레그램 알림.
+국토부 실거래가를 30분마다 모으고, 매물/경매 캡처를 올리면 Claude Vision이 자동으로 정리해서
+급매를 감지하는 대시보드 + 텔레그램 알림. 폰 브라우저로 접속해서 봅니다.
 
 ```
-GitHub Actions (30분 cron) → 스크래핑 → Supabase → 정적 프론트엔드(Vercel) + 텔레그램 알림
+GitHub Actions (30분 cron)
+  ├─ 국토부 실거래가 수집 → Supabase
+  ├─ 대기 중인 매물/경매 캡처 → Claude Vision 파싱 → Supabase (+ 실거래가와 비교해 급매 판정)
+  └─ 입찰일 임박 경매물건 → 텔레그램 알림
+Supabase → 정적 프론트엔드(Vercel): 대시보드 / 업로드 / 관리 탭
 ```
+
+네이버 부동산 매물 자동 수집은 봇 차단 때문에 포기했습니다 — 대신 **직접 캡처해서 올리면 자동 정리**하는 방식으로 바꿨습니다 (아래 "매물/경매 캡처 업로드 기능" 참고).
 
 ## 설정 순서
 
@@ -22,35 +28,48 @@ GitHub Actions (30분 cron) → 스크래핑 → Supabase → 정적 프론트�
 1. https://supabase.com 가입 (GitHub 계정으로 바로 가능, 카드 등록 불필요)
 2. New Project 생성
 3. SQL Editor에서 [supabase/schema.sql](supabase/schema.sql) 전체 실행
-4. 이어서 [config/seed_targets.sql](config/seed_targets.sql) 실행 (초기 6개 단지/구역 등록 — lawd_cd는 code.go.kr에서 확인 완료된 값)
-5. Authentication > Users에서 본인 계정 1개 생성 (관리 탭 로그인용)
-6. Settings > API Keys에서 `Project URL`, publishable key(`sb_publishable_...`, 예전 anon key), secret key(`sb_secret_...`, 예전 service_role key) 복사 — 새로 만든 프로젝트는 새 키 체계라 이름이 다를 수 있음
-7. 로컬에 `.env` 만들고 (`.env.example` 복사) 값 채운 뒤 `pip install -r requirements.txt && python -m scraper.healthcheck` 실행해서 연결 확인
+4. 이어서 [supabase/schema_captures.sql](supabase/schema_captures.sql) 실행 (매물/경매 캡처 업로드 기능용 테이블 + Storage 버킷)
+5. 이어서 [config/seed_targets.sql](config/seed_targets.sql) 실행 (초기 6개 단지/구역 등록 — lawd_cd는 code.go.kr에서 확인 완료된 값)
+7. Settings > API Keys에서 `Project URL`, publishable key(`sb_publishable_...`, 예전 anon key), secret key(`sb_secret_...`, 예전 service_role key) 복사 — 새로 만든 프로젝트는 새 키 체계라 이름이 다를 수 있음
+8. 로컬에 `.env` 만들고 (`.env.example` 복사) 값 채운 뒤 `pip install -r requirements.txt && python -m scraper.healthcheck` 실행해서 연결 확인
 
 ### 3. 텔레그램 봇 만들기
 1. 텔레그램에서 `@BotFather` 검색 → `/newbot` → 토큰 받기
-2. `@userinfobot`에게 말 걸어서 본인 chat_id 확인
+2. `@userinfobot`에게 말 걸어서 본인 chat_id 확인 (검색 결과에 가짜가 많으니 `@username`이 정확히 `userinfobot`인지 확인)
 3. 만든 봇에게 먼저 아무 메시지나 한 번 보내두기 (안 하면 알림이 안 옴)
 
-### 4. GitHub 저장소 설정
+### 4. Anthropic API 키 발급 (매물/경매 캡처 파싱용)
+1. https://console.anthropic.com → API Keys → Create Key
+2. 생성 직후에만 전체 값(`sk-ant-...`)이 보이니 그때 복사 — 나중엔 마스킹된 값만 보임
+
+### 5. GitHub 저장소 설정
 1. 이 폴더를 public 저장소로 push
-2. Settings > Secrets and variables > Actions에서 등록:
+2. Settings > Secrets and variables > Actions에서 등록 (`gh secret set <이름>`으로 터미널에서 직접 입력하면 값이 화면에 노출 안 돼서 더 안전함):
    - `MOLIT_SERVICE_KEY`
    - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY` (service_role — 절대 코드에 커밋하지 말 것)
+   - `SUPABASE_SERVICE_ROLE_KEY` (secret key — 절대 코드에 커밋하지 말 것)
    - `TELEGRAM_BOT_TOKEN`
    - `TELEGRAM_CHAT_ID`
+   - `ANTHROPIC_API_KEY`
 3. Actions 탭에서 `scrape` 워크플로를 한 번 수동 실행(`workflow_dispatch`)해서 에러 없는지 확인
 
-### 5. 프론트엔드 배포 (Vercel)
-1. [frontend/config.js](frontend/config.js)에 Supabase `Project URL`과 `anon public key` 입력 (anon key는 공개되어도 안전함)
+### 6. 프론트엔드 배포 (Vercel)
+1. [frontend/config.js](frontend/config.js)에 Supabase `Project URL`과 publishable key 입력 (공개되어도 안전한 키)
 2. Vercel에 GitHub 저장소 연결, **Root Directory를 `frontend`로 설정**, Build Command 없음(정적 파일)
 3. 배포 후 나온 URL을 폰 브라우저 홈 화면에 추가하면 앱처럼 쓸 수 있음
 
+## 매물/경매 캡처 업로드 기능
+
+네이버 매물 자동 수집은 봇 차단 때문에 포기했습니다 (아래 한계 참고). 대신 **대시보드 "업로드" 탭**(로그인 필요)에서
+매물이나 법원경매 물건 캡처 이미지를 올리면, 다음 자동 실행(최대 30분 이내) 때 Claude Vision이 읽어서 자동으로 정리합니다.
+
+- **매물 캡처** → `listings` 테이블에 추가되고, 같은 단지/구역의 최근 6개월 실거래가(또는 재개발구역은 총투자금)와 비교해서 급매 조건에 맞으면 텔레그램으로 알림
+- **경매 캡처** → `auction_items` 테이블에 추가, **입찰기일 3일 전**에 텔레그램으로 자동 알림
+- 업로드 시 단지/구역을 지정하지 않으면 파싱 결과만 저장되고 급매 판정은 건너뜁니다 (매물은 단지 지정을 권장, 경매는 선택)
+
 ## 알아둘 점 / 한계
 
-- **네이버 내부 API는 비공식**이라 화면 개편 시 깨질 수 있어요. 403이나 빈 응답이 계속되면 브라우저 개발자도구로 실제 요청을 다시 확인해서 [scraper/naver_client.py](scraper/naver_client.py)를 고쳐야 해요.
-- **북아현3구역(재개발)의 네이버 매물 수집은 아직 TODO**예요. 단일 단지가 아니라 구역 전체라 매물 검색 방식이 달라서, 지금은 연립다세대 실거래가만 수집하고 있어요. 매물까지 보고 싶으면 추가 작업이 필요해요.
-- **단독/다가구, 상업업무용 실거래가 엔드포인트는 미확정**이에요. data.go.kr에서 신청할 때 정확한 주소를 확인해 고쳐주세요.
-- 요청 사이 최소 1.5초 간격을 두고 있지만, 그래도 네이버 약관상 "과도한 자동 수집"에는 해당하지 않게 개인 소규모 조회 수준을 유지하세요.
-- 단지 추가/삭제는 대시보드의 "관리" 탭에서 로그인 후 바로 할 수 있어요 (코드 수정 불필요).
+- **네이버 매물 자동 수집은 포기했습니다.** `scraper/naver_client.py`에 코드는 남아있지만 실제로 호출하면 봇 차단(세션/쿠키/TLS 핑거프린팅 요구)에 막혀요. `main.py`에서도 더 이상 호출하지 않습니다 — 참고용으로만 남겨뒀어요.
+- 국토부 실거래가 4개 API(아파트/연립다세대/단독다가구/상업업무용) 엔드포인트는 **실제 서비스키로 호출까지 검증 완료**했습니다.
+- 요청 사이 간격을 두고 있지만, 캡처 업로드 방식이라 네이버 쪽 약관 리스크 자체가 거의 없어졌어요.
+- 단지 추가/삭제는 "관리" 탭에서, 매물/경매 업로드는 "업로드" 탭에서 로그인 후 바로 할 수 있어요 (코드 수정 불필요).
