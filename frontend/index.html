@@ -231,6 +231,9 @@ async function loadUpload() {
   const { data: targets } = await supabase.from("targets").select("id,name").order("name");
   const { data: recent } = await supabase
     .from("captures").select("*, targets(name)").order("created_at", { ascending: false }).limit(10);
+  const { data: myListings } = await supabase
+    .from("listings").select("*, targets(name)").eq("is_active", true)
+    .order("first_seen_at", { ascending: false }).limit(20);
 
   const statusLabel = { pending: "처리 대기중", processed: "정리 완료", error: "실패" };
 
@@ -274,6 +277,17 @@ async function loadUpload() {
         </div>
         ${unmatchedRowHtml(c)}
       `).join("") || `<p class="muted">업로드 내역 없음</p>`}
+    </div>
+    <div class="card">
+      <h2>올라간 매물</h2>
+      ${(myListings || []).map(l => `
+        <div class="listing-row">
+          <span>${l.targets ? l.targets.name + " · " : ""}${l.floor_info || ""} ${l.area_m2 ? Math.round(l.area_m2) + "㎡" : ""}</span>
+          <span>${won(l.price)}
+            <button type="button" class="ghost del-listing" data-id="${l.id}" style="margin-left:6px">삭제</button>
+          </span>
+        </div>
+      `).join("") || `<p class="muted">올라간 매물 없음</p>`}
     </div>
     <button class="ghost" id="logout-upload">로그아웃</button>
   `;
@@ -345,6 +359,15 @@ async function loadUpload() {
         .from("captures").update({ target_id: targetId, status: "pending" }).eq("id", id);
       if (error) { alert(error.message); return; }
       alert("연결했어요. 다음 자동 실행 때 반영됩니다.");
+      loadUpload();
+    };
+  });
+
+  uploadEl.querySelectorAll(".del-listing").forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm("이 매물을 삭제할까요?")) return;
+      const { error } = await supabase.from("listings").delete().eq("id", btn.dataset.id);
+      if (error) { alert(error.message); return; }
       loadUpload();
     };
   });
