@@ -27,29 +27,32 @@ def _recent_deal_ymds(n: int = RECENT_MONTHS) -> list[str]:
     return months
 
 
-def _insert_trades(target_id: str, source: str, trades: list[dict]) -> None:
+def _to_rows(target_id: str, source: str, trades: list[dict]) -> list[dict]:
+    rows = []
     for t in trades:
         try:
-            db.insert_transaction(
-                target_id,
-                source,
+            rows.append(
                 {
+                    "target_id": target_id,
+                    "source": source,
                     "deal_date": f"{t.get('년', t.get('dealYear',''))}-{int(t.get('월', t.get('dealMonth','1'))):02d}-{int(t.get('일', t.get('dealDay','1'))):02d}",
                     "price": int(float(t.get("거래금액", "0").replace(",", "")) * 10000),
                     "area_m2": float(t.get("전용면적", 0) or 0),
                     "floor_info": t.get("층"),
                     "raw_json": t,
-                },
+                }
             )
         except Exception as e:  # noqa: BLE001
-            print(f"[molit] 거래 저장 실패: {e}")
+            print(f"[molit] 거래 변환 실패: {e}")
+    return rows
 
 
 def process_apartment_or_commercial(target: dict) -> None:
     fetch_fn = molit_client.fetch_commercial_trades if target["type"] == "commercial" else molit_client.fetch_apt_trades
     source = "commercial" if target["type"] == "commercial" else "apt"
 
-    trade_count = 0
+    db.delete_recent_transactions(target["id"], source)
+    rows: list[dict] = []
     for ymd in _recent_deal_ymds():
         t0 = time.monotonic()
         try:
@@ -58,17 +61,19 @@ def process_apartment_or_commercial(target: dict) -> None:
             print(f"[molit] {target['name']} {ymd} 조회 실패 ({time.monotonic()-t0:.1f}s): {e}")
             continue
         print(f"[molit] {target['name']} {ymd}: {len(batch)}건 ({time.monotonic()-t0:.1f}s)")
-        trade_count += len(batch)
-        _insert_trades(target["id"], source, batch)
+        rows.extend(_to_rows(target["id"], source, batch))
 
-    print(f"[molit] {target['name']}: 실거래 {trade_count}건 수집")
+    t0 = time.monotonic()
+    db.insert_transactions_batch(rows)
+    print(f"[molit] {target['name']}: 실거래 {len(rows)}건 저장 ({time.monotonic()-t0:.1f}s)")
 
 
 def process_redevelopment(target: dict) -> None:
     # 재개발구역은 빌라(연립다세대)와 단독/다가구(상가주택 포함)가 섞여 있어 둘 다 수집
     sources = [("villa", molit_client.fetch_villa_trades), ("house", molit_client.fetch_house_trades)]
-    trade_count = 0
+    rows: list[dict] = []
     for source, fetch_fn in sources:
+        db.delete_recent_transactions(target["id"], source)
         for ymd in _recent_deal_ymds():
             t0 = time.monotonic()
             try:
@@ -77,10 +82,11 @@ def process_redevelopment(target: dict) -> None:
                 print(f"[molit:{source}] {target['name']} {ymd} 조회 실패 ({time.monotonic()-t0:.1f}s): {e}")
                 continue
             print(f"[molit:{source}] {target['name']} {ymd}: {len(batch)}건 ({time.monotonic()-t0:.1f}s)")
-            trade_count += len(batch)
-            _insert_trades(target["id"], source, batch)
+            rows.extend(_to_rows(target["id"], source, batch))
 
-    print(f"[redevelopment] {target['name']}: 실거래 {trade_count}건 수집")
+    t0 = time.monotonic()
+    db.insert_transactions_batch(rows)
+    print(f"[redevelopment] {target['name']}: 실거래 {len(rows)}건 저장 ({time.monotonic()-t0:.1f}s)")
 
 
 def run() -> None:

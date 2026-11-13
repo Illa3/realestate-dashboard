@@ -92,6 +92,26 @@ def insert_transaction(target_id: str, source: str, fields: dict) -> None:
     ).execute()
 
 
+def delete_recent_transactions(target_id: str, source: str, months: int = 6) -> None:
+    """같은 창(최근 n개월)을 다시 수집하기 전에 지워서 30분마다 중복이 쌓이지 않게 한다."""
+    from datetime import date, timedelta
+
+    cutoff = (date.today() - timedelta(days=30 * months)).isoformat()
+    get_client().table("transactions").delete().eq("target_id", target_id).eq(
+        "source", source
+    ).gte("deal_date", cutoff).execute()
+
+
+def insert_transactions_batch(rows: list[dict]) -> None:
+    """건별 insert는 네트워크 왕복이 쌓여 수십 배 느려지므로 한 번에 bulk insert."""
+    if not rows:
+        return
+    CHUNK = 500
+    client = get_client()
+    for i in range(0, len(rows), CHUNK):
+        client.table("transactions").insert(rows[i : i + CHUNK]).execute()
+
+
 def insert_alert(target_id: str, listing_id: str | None, reason: str, detail: dict) -> dict:
     inserted = (
         get_client()
