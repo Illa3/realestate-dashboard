@@ -108,8 +108,8 @@ async function renderLoginForm(container, onSuccess) {
     <div class="card">
       <h2>로그인</h2>
       <form class="inline" id="login-form">
-        <input type="email" id="login-email" placeholder="이메일" required />
-        <input type="password" id="login-password" placeholder="비밀번호" required />
+        <input type="email" id="login-email" placeholder="이메일" autocomplete="username" required />
+        <input type="password" id="login-password" placeholder="비밀번호" autocomplete="current-password" required />
         <button class="primary" type="submit">로그인</button>
       </form>
     </div>`;
