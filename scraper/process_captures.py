@@ -23,7 +23,9 @@ def _evaluate_and_notify(target: dict, listing: dict, parsed: dict) -> None:
         )
         if result:
             alerts.append(result)
-    else:
+    elif target["type"] != "commercial":
+        # 상가는 국토부 API가 법정동/건물 단위로 안 좁혀져서(구 전체 상업용 거래가 다 섞임)
+        # 실거래가 비교 기준 자체가 신뢰할 수 없어 가격비교 알림은 끔. 키워드 알림은 유지.
         price_per_m2 = [
             t["price"] / t["area_m2"] for t in transactions if t.get("price") and t.get("area_m2")
         ]
