@@ -159,14 +159,64 @@ async function loadDashboard() {
 
     return `
       <div class="card">
-        <h2>${t.name} <span class="badge">${TYPE_LABEL[t.type] || t.type}</span></h2>
+        <h2 class="tx-toggle" data-target-id="${t.id}" style="cursor:pointer">
+          ${t.name} <span class="badge">${TYPE_LABEL[t.type] || t.type}</span>
+          <span class="muted" style="margin-left:auto;font-size:12px">실거래가 ▾</span>
+        </h2>
         ${alertHtml}
         ${listingHtml}
+        <div class="tx-summary" id="tx-${t.id}" hidden></div>
       </div>
     `;
   }));
 
   dashboardEl.innerHTML = auctionCard + (cards.join("") || `<p class="muted">등록된 단지가 없습니다. 관리 탭에서 추가하세요.</p>`);
+
+  dashboardEl.querySelectorAll(".tx-toggle").forEach(el => {
+    el.onclick = () => toggleTxSummary(el.dataset.targetId);
+  });
+}
+
+const txCache = {};
+
+async function toggleTxSummary(targetId) {
+  const el = document.getElementById(`tx-${targetId}`);
+  if (!el) return;
+  if (!el.hidden) { el.hidden = true; return; }
+  el.hidden = false;
+
+  if (txCache[targetId]) { el.innerHTML = txCache[targetId]; return; }
+  el.innerHTML = `<p class="muted">불러오는 중...</p>`;
+
+  const { data, error } = await supabase
+    .from("transactions").select("deal_date,price,area_m2")
+    .eq("target_id", targetId).order("deal_date", { ascending: false });
+  if (error) { el.innerHTML = `<p class="alert">${error.message}</p>`; return; }
+
+  const byMonth = {};
+  (data || []).forEach(t => {
+    const ym = t.deal_date.slice(0, 7);
+    byMonth[ym] ??= { count: 0, prices: [], perM2Sum: 0, perM2N: 0 };
+    byMonth[ym].count += 1;
+    byMonth[ym].prices.push(t.price);
+    if (t.area_m2 > 0) { byMonth[ym].perM2Sum += t.price / t.area_m2; byMonth[ym].perM2N += 1; }
+  });
+  const months = Object.keys(byMonth).sort().reverse().slice(0, 6);
+
+  const html = months.length
+    ? `<p class="muted" style="margin-top:8px">최근 6개월 실거래가</p>` + months.map(ym => {
+        const m = byMonth[ym];
+        const avgPerM2 = m.perM2N ? Math.round(m.perM2Sum / m.perM2N) : null;
+        return `
+          <div class="listing-row">
+            <span>${ym} (${m.count}건)${avgPerM2 ? ` · 평균 ㎡당 ${won(avgPerM2)}` : ""}</span>
+            <span>${won(Math.min(...m.prices))}~${won(Math.max(...m.prices))}</span>
+          </div>`;
+      }).join("")
+    : `<p class="muted" style="margin-top:8px">실거래 데이터 없음</p>`;
+
+  txCache[targetId] = html;
+  el.innerHTML = html;
 }
 
 async function loadUpload() {
