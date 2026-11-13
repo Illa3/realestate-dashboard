@@ -247,10 +247,11 @@ async function loadUpload() {
           ${(targets || []).map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
         </select>
         <input type="file" id="u-file" accept="image/*" />
+        <button type="button" class="ghost" id="paste-btn">📋 클립보드에서 붙여넣기</button>
         <div id="paste-preview" class="muted" style="font-size:12px"></div>
         <button class="primary" type="submit">업로드</button>
       </form>
-      <p class="muted">업로드하면 다음 자동 실행(최대 30분 이내) 때 Claude Vision이 읽어서 자동으로 정리해요. PC에서는 캡처한 직후 이 화면에서 <b>Ctrl+V</b>로 바로 붙여넣을 수 있어요.</p>
+      <p class="muted">업로드하면 다음 자동 실행(최대 30분 이내) 때 Claude Vision이 읽어서 자동으로 정리해요. PC에서 캡처한 직후, 위 "클립보드에서 붙여넣기" 버튼을 누르거나 이 화면에서 <b>Ctrl+V</b>를 눌러보세요.</p>
     </div>
     <div class="card">
       <h2>최근 업로드</h2>
@@ -266,18 +267,38 @@ async function loadUpload() {
 
   let pastedBlob = null;
 
+  const showPastePreview = (blob) => {
+    pastedBlob = blob;
+    const url = URL.createObjectURL(blob);
+    document.getElementById("paste-preview").innerHTML =
+      `<img src="${url}" style="max-width:140px;border-radius:8px;border:1px solid var(--border);display:block;margin-top:6px" /> 클립보드 이미지 준비됨`;
+  };
+
   window.onpaste = (e) => {
     const items = e.clipboardData && e.clipboardData.items;
     if (!items) return;
     for (const item of items) {
       if (item.type.startsWith("image/")) {
-        pastedBlob = item.getAsFile();
-        const url = URL.createObjectURL(pastedBlob);
-        document.getElementById("paste-preview").innerHTML =
-          `<img src="${url}" style="max-width:140px;border-radius:8px;border:1px solid var(--border);display:block;margin-top:6px" /> 클립보드 이미지 준비됨`;
+        showPastePreview(item.getAsFile());
         e.preventDefault();
         break;
       }
+    }
+  };
+
+  document.getElementById("paste-btn").onclick = async () => {
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((t) => t.startsWith("image/"));
+        if (imageType) {
+          showPastePreview(await item.getType(imageType));
+          return;
+        }
+      }
+      alert("클립보드에 이미지가 없어요. 먼저 화면을 캡처해 주세요.");
+    } catch (err) {
+      alert("클립보드 접근이 거부됐어요: " + err.message + "\n브라우저가 물어보는 권한 허용 창이 있으면 허용해 주세요.");
     }
   };
 
