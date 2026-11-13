@@ -118,6 +118,7 @@ def process_redevelopment(target: dict) -> None:
             except Exception as e:  # noqa: BLE001
                 print(f"[molit:{source}] {target['name']} {ymd} 조회 실패 ({time.monotonic()-t0:.1f}s): {e}")
                 continue
+            batch = [t for t in batch if _matches_location(t, target)]
             print(f"[molit:{source}] {target['name']} {ymd}: {len(batch)}건 ({time.monotonic()-t0:.1f}s)")
             rows.extend(_to_rows(target["id"], source, batch))
 
