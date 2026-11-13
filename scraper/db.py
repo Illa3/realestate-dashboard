@@ -142,10 +142,11 @@ def download_capture_image(image_path: str) -> bytes:
     return get_client().storage.from_("captures").download(image_path)
 
 
-def mark_capture_processed(capture_id: str, parsed: dict) -> None:
-    get_client().table("captures").update(
-        {"status": "processed", "parsed": parsed, "processed_at": "now()"}
-    ).eq("id", capture_id).execute()
+def mark_capture_processed(capture_id: str, parsed: dict, target_id: str | None = None) -> None:
+    fields = {"status": "processed", "parsed": parsed, "processed_at": "now()"}
+    if target_id:
+        fields["target_id"] = target_id
+    get_client().table("captures").update(fields).eq("id", capture_id).execute()
 
 
 def mark_capture_error(capture_id: str, message: str) -> None:

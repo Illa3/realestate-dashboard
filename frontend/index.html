@@ -230,9 +230,21 @@ async function loadUpload() {
 
   const { data: targets } = await supabase.from("targets").select("id,name").order("name");
   const { data: recent } = await supabase
-    .from("captures").select("*").order("created_at", { ascending: false }).limit(10);
+    .from("captures").select("*, targets(name)").order("created_at", { ascending: false }).limit(10);
 
   const statusLabel = { pending: "처리 대기중", processed: "정리 완료", error: "실패" };
+
+  const unmatchedRowHtml = (c) => {
+    if (c.kind !== "listing" || c.status !== "processed" || c.target_id) return "";
+    return `
+      <div class="inline" style="margin:4px 0 2px">
+        <select class="fix-target" data-capture-id="${c.id}">
+          <option value="">관심구역 선택</option>
+          ${(targets || []).map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
+        </select>
+        <button type="button" class="ghost fix-target-btn" data-capture-id="${c.id}">연결</button>
+      </div>`;
+  };
 
   uploadEl.innerHTML = `
     <div class="card">
@@ -243,7 +255,7 @@ async function loadUpload() {
           <option value="auction">경매물건</option>
         </select>
         <select id="u-target">
-          <option value="">(연결할 단지/구역 선택, 경매는 선택사항)</option>
+          <option value="">자동 분류 (추천 — 캡처 속 단지/건물 이름으로 알아서 연결)</option>
           ${(targets || []).map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
         </select>
         <input type="file" id="u-file" accept="image/*" />
@@ -251,15 +263,16 @@ async function loadUpload() {
         <div id="paste-preview" class="muted" style="font-size:12px"></div>
         <button class="primary" type="submit">업로드</button>
       </form>
-      <p class="muted">업로드하면 다음 자동 실행(최대 30분 이내) 때 Claude Vision이 읽어서 자동으로 정리해요. PC에서 캡처한 직후, 위 "클립보드에서 붙여넣기" 버튼을 누르거나 이 화면에서 <b>Ctrl+V</b>를 눌러보세요.</p>
+      <p class="muted">업로드하면 다음 자동 실행(최대 30분 이내) 때 Claude Vision이 읽어서 자동으로 정리해요. 관심구역을 선택 안 하면 캡처 속 단지/건물 이름으로 자동 연결을 시도하고, 실패하면 텔레그램으로 알려드려요. PC에서 캡처한 직후, 위 "클립보드에서 붙여넣기" 버튼을 누르거나 이 화면에서 <b>Ctrl+V</b>를 눌러보세요.</p>
     </div>
     <div class="card">
       <h2>최근 업로드</h2>
       ${(recent || []).map(c => `
         <div class="listing-row">
           <span>${c.kind === "listing" ? "매물" : "경매"} · ${new Date(c.created_at).toLocaleString("ko-KR")}</span>
-          <span class="status-${c.status}">${statusLabel[c.status] || c.status}</span>
+          <span class="status-${c.status}">${statusLabel[c.status] || c.status}${c.targets ? " · " + c.targets.name : ""}</span>
         </div>
+        ${unmatchedRowHtml(c)}
       `).join("") || `<p class="muted">업로드 내역 없음</p>`}
     </div>
     <button class="ghost" id="logout-upload">로그아웃</button>
@@ -322,6 +335,20 @@ async function loadUpload() {
     loadUpload();
   };
 
+  uploadEl.querySelectorAll(".fix-target-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.captureId;
+      const sel = uploadEl.querySelector(`.fix-target[data-capture-id="${id}"]`);
+      const targetId = sel.value;
+      if (!targetId) { alert("관심구역을 선택해주세요."); return; }
+      const { error } = await supabase
+        .from("captures").update({ target_id: targetId, status: "pending" }).eq("id", id);
+      if (error) { alert(error.message); return; }
+      alert("연결했어요. 다음 자동 실행 때 반영됩니다.");
+      loadUpload();
+    };
+  });
+
   document.getElementById("logout-upload").onclick = async () => {
     window.onpaste = null;
     await supabase.auth.signOut();
@@ -347,6 +374,7 @@ async function loadManage() {
         </select>
         <input id="f-lawd" placeholder="법정동코드 5자리 (예: 11710)" required />
         <input id="f-threshold" type="number" placeholder="급매 판정 기준 % (기본 10)" value="10" />
+        <input id="f-keywords" placeholder="매칭 키워드 (쉼표구분, 선택) 예: 장미종합상가,장미상가" />
         <button class="primary" type="submit">추가</button>
       </form>
     </div>
@@ -354,6 +382,11 @@ async function loadManage() {
       <div class="card">
         <h2>${t.name} <span class="badge">${TYPE_LABEL[t.type] || t.type}</span> ${t.active ? "" : '<span class="badge">비활성</span>'}</h2>
         <p class="muted">법정동코드 ${t.lawd_cd} · 기준 ${t.discount_threshold_pct}%</p>
+        <p class="muted" style="margin:6px 0 2px">캡처 업로드 시 자동 연결용 키워드 (단지명/dong_name과 별개로 더 추가하고 싶을 때)</p>
+        <div class="inline">
+          <input class="kw-input" data-id="${t.id}" placeholder="예: 장미종합상가,장미상가" value="${t.match_keywords || ""}" style="flex:1;min-width:160px" />
+          <button class="ghost kw-save" data-id="${t.id}">키워드 저장</button>
+        </div>
         <div class="row-actions">
           <button class="ghost" data-action="toggle" data-id="${t.id}" data-active="${t.active}">${t.active ? "비활성화" : "활성화"}</button>
           <button class="ghost" data-action="delete" data-id="${t.id}">삭제</button>
@@ -370,9 +403,19 @@ async function loadManage() {
       type: document.getElementById("f-type").value,
       lawd_cd: document.getElementById("f-lawd").value,
       discount_threshold_pct: Number(document.getElementById("f-threshold").value) || 10,
+      match_keywords: document.getElementById("f-keywords").value.trim() || null,
     });
     if (error) alert(error.message); else loadManage();
   };
+
+  manageEl.querySelectorAll(".kw-save").forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      const val = manageEl.querySelector(`.kw-input[data-id="${id}"]`).value.trim();
+      const { error } = await supabase.from("targets").update({ match_keywords: val || null }).eq("id", id);
+      if (error) alert(error.message); else alert("저장했어요.");
+    };
+  });
 
   manageEl.querySelectorAll("[data-action]").forEach(btn => {
     btn.onclick = async () => {

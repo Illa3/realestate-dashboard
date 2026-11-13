@@ -29,7 +29,8 @@ Supabase → 정적 프론트엔드(Vercel): 대시보드 / 업로드 / 관리 �
 2. New Project 생성
 3. SQL Editor에서 [supabase/schema.sql](supabase/schema.sql) 전체 실행
 4. 이어서 [supabase/schema_captures.sql](supabase/schema_captures.sql) 실행 (매물/경매 캡처 업로드 기능용 테이블 + Storage 버킷)
-5. 이어서 [config/seed_targets.sql](config/seed_targets.sql) 실행 (초기 6개 단지/구역 등록 — lawd_cd는 code.go.kr에서 확인 완료된 값)
+5. 이어서 [supabase/migration_add_match_keywords.sql](supabase/migration_add_match_keywords.sql) 실행 (캡처 자동분류용 키워드 컬럼 추가)
+6. 이어서 [config/seed_targets.sql](config/seed_targets.sql) 실행 (초기 6개 단지/구역 등록 — lawd_cd는 code.go.kr에서 확인 완료된 값)
 7. Settings > API Keys에서 `Project URL`, publishable key(`sb_publishable_...`, 예전 anon key), secret key(`sb_secret_...`, 예전 service_role key) 복사 — 새로 만든 프로젝트는 새 키 체계라 이름이 다를 수 있음
 8. 로컬에 `.env` 만들고 (`.env.example` 복사) 값 채운 뒤 `pip install -r requirements.txt && python -m scraper.healthcheck` 실행해서 연결 확인
 
@@ -65,7 +66,8 @@ Supabase → 정적 프론트엔드(Vercel): 대시보드 / 업로드 / 관리 �
 
 - **매물 캡처** → `listings` 테이블에 추가되고, 같은 단지/구역의 최근 6개월 실거래가(또는 재개발구역은 총투자금)와 비교해서 급매 조건에 맞으면 텔레그램으로 알림
 - **경매 캡처** → `auction_items` 테이블에 추가, **입찰기일 3일 전**에 텔레그램으로 자동 알림
-- 업로드 시 단지/구역을 지정하지 않으면 파싱 결과만 저장되고 급매 판정은 건너뜁니다 (매물은 단지 지정을 권장, 경매는 선택)
+- 업로드 시 단지/구역을 **지정하지 않으면 자동 분류**를 시도합니다 — Claude Vision이 읽은 캡처 상단의 단지/건물 이름을 각 target의 단지명(apt_name)/법정동명(dong_name)/매칭 키워드(match_keywords, 관리 탭에서 설정)와 비교해서 하나로 좁혀지면 자동 연결하고, 둘 이상 겹치거나 아예 못 찾으면 텔레그램으로 알려드립니다.
+- 자동 분류가 실패한 캡처는 업로드 탭 "최근 업로드" 목록에 관심구역을 고르는 드롭다운이 뜨니 거기서 수동으로 연결하면 다음 자동 실행 때 반영됩니다.
 
 ## 알아둘 점 / 한계
 

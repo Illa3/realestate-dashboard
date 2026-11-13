@@ -2,7 +2,36 @@
 listings 또는 auction_items 테이블로 정리한다. GitHub Actions 크론에서 호출.
 """
 
+import re
+
 from . import alert_rules, db, redevelopment, telegram_notify, vision_client
+
+
+def _normalize(s: str | None) -> str:
+    return re.sub(r"\s+", "", s or "").lower()
+
+
+def _candidate_names(target: dict) -> list[str]:
+    names = [target.get("apt_name"), target.get("name"), target.get("dong_name")]
+    names.extend((target.get("match_keywords") or "").split(","))
+    return [n for n in names if n and n.strip()]
+
+
+def match_targets(name_hint: str | None, targets: list[dict]) -> list[dict]:
+    """Vision이 읽은 단지/건물 이름(name_hint)을 target의 apt_name/name/dong_name/
+    match_keywords와 비교해 후보를 찾는다. 공백만 무시하는 단순 부분일치라 과매칭을
+    피하려고 2글자 미만 후보는 무시한다."""
+    norm_hint = _normalize(name_hint)
+    if not norm_hint:
+        return []
+    matches = []
+    for target in targets:
+        for cand in _candidate_names(target):
+            norm_cand = _normalize(cand)
+            if len(norm_cand) >= 2 and (norm_cand in norm_hint or norm_hint in norm_cand):
+                matches.append(target)
+                break
+    return matches
 
 
 def _evaluate_and_notify(target: dict, listing: dict, parsed: dict) -> None:
@@ -50,13 +79,32 @@ def process_listing_capture(capture: dict) -> None:
     image_bytes = db.download_capture_image(capture["image_path"])
     parsed = vision_client.extract(image_bytes, "listing")
 
-    if not capture.get("target_id"):
-        db.mark_capture_processed(capture["id"], parsed)
+    target_id = capture.get("target_id")
+    auto_matched = False
+    if not target_id:
+        matches = match_targets(parsed.get("name_hint"), db.get_active_targets())
+        if len(matches) == 1:
+            target_id = matches[0]["id"]
+            auto_matched = True
+            print(f"[capture:{capture['id']}] 자동분류: {matches[0]['name']}")
+        elif len(matches) > 1:
+            names = ", ".join(m["name"] for m in matches)
+            print(f"[capture:{capture['id']}] 자동분류 모호함({names}) — 수동 확인 필요")
+        else:
+            print(f"[capture:{capture['id']}] 자동분류 실패 — 수동 확인 필요")
+
+    db.mark_capture_processed(capture["id"], parsed, target_id if auto_matched else None)
+
+    if not target_id:
+        telegram_notify.send(
+            f"🔍 캡처 자동분류 실패\n\"{parsed.get('name_hint') or '이름 미상'}\"\n"
+            "업로드 탭 '최근 업로드'에서 관심구역을 직접 연결해주세요."
+        )
         print(f"[capture:{capture['id']}] target 미지정 — listings엔 반영 안 됨, parsed만 저장")
         return
 
     listing = db.insert_manual_listing(
-        capture["target_id"],
+        target_id,
         capture["id"],
         {
             "price": parsed.get("price"),
@@ -68,10 +116,9 @@ def process_listing_capture(capture: dict) -> None:
             "raw_json": parsed,
         },
     )
-    db.mark_capture_processed(capture["id"], parsed)
     print(f"[capture:{capture['id']}] 매물로 정리 완료: {parsed.get('name_hint')}")
 
-    target = db.get_target(capture["target_id"])
+    target = db.get_target(target_id)
     _evaluate_and_notify(target, listing, parsed)
 
 
