@@ -35,6 +35,18 @@ def _first(t: dict, *keys: str, default=None):
     return default
 
 
+def _matches_location(t: dict, target: dict) -> bool:
+    """target에 dong_name/jibun이 지정돼 있으면 그 동·지번 거래만 통과시킨다.
+    (예: 신천동 장미아파트 상가처럼 구 전체 조회로는 범위가 너무 넓은 경우)"""
+    dong = target.get("dong_name")
+    if dong and _first(t, "법정동", "umdNm") != dong:
+        return False
+    jibun = target.get("jibun")
+    if jibun and str(_first(t, "지번", "jibun", default="")) != str(jibun):
+        return False
+    return True
+
+
 def _to_rows(target_id: str, source: str, trades: list[dict]) -> list[dict]:
     rows = []
     for t in trades:
@@ -80,6 +92,7 @@ def process_apartment_or_commercial(target: dict) -> None:
         except Exception as e:  # noqa: BLE001
             print(f"[molit] {target['name']} {ymd} 조회 실패 ({time.monotonic()-t0:.1f}s): {e}")
             continue
+        batch = [t for t in batch if _matches_location(t, target)]
         print(f"[molit] {target['name']} {ymd}: {len(batch)}건 ({time.monotonic()-t0:.1f}s)")
         rows.extend(_to_rows(target["id"], source, batch))
 

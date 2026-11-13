@@ -14,6 +14,8 @@ create table if not exists targets (
   discount_threshold_pct numeric not null default 10, -- 급매 판정 기준: 실거래/감정가 대비 할인율(%)
   price_drop_threshold_pct numeric not null default 5, -- 호가 인하 감지 기준(%)
   appraisal_value bigint,                      -- 재개발구역: 감정가 (총투자금 계산용, 평당 또는 호별)
+  dong_name text,                               -- 상가 등: 국토부 API 응답의 법정동명(umdNm)과 일치해야 할 값 (구 전체로 범위가 너무 넓을 때 좁히는 용도)
+  jibun text,                                   -- 상가 등: 국토부 API 응답의 지번(jibun)과 일치해야 할 값
   active boolean not null default true,
   memo text,
   created_at timestamptz not null default now(),
