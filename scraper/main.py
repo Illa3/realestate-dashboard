@@ -27,18 +27,38 @@ def _recent_deal_ymds(n: int = RECENT_MONTHS) -> list[str]:
     return months
 
 
+def _first(t: dict, *keys: str, default=None):
+    for k in keys:
+        v = t.get(k)
+        if v not in (None, ""):
+            return v
+    return default
+
+
 def _to_rows(target_id: str, source: str, trades: list[dict]) -> list[dict]:
     rows = []
     for t in trades:
         try:
+            year = _first(t, "년", "dealYear", default="2000")
+            month = _first(t, "월", "dealMonth", default="1")
+            day = _first(t, "일", "dealDay", default="1")
+            # MOLIT API 응답은 API마다 영문 필드(dealAmount, excluUseAr, floor 등)를
+            # 쓰기도 하고 한글 필드를 쓰기도 해서 둘 다 시도한다.
+            price_raw = _first(t, "거래금액", "dealAmount", "물건금액", default="0")
+            # 아파트/연립다세대=excluUseAr(전용면적), 단독다가구=totalFloorAr(연면적), 상업용=buildingAr(건물면적)
+            area_raw = _first(
+                t, "전용면적", "excluUseAr", "totalFloorAr", "buildingAr", "plottageAr", "대지권면적", default=0
+            )
+            floor_info = _first(t, "층", "floor")
+
             rows.append(
                 {
                     "target_id": target_id,
                     "source": source,
-                    "deal_date": f"{t.get('년', t.get('dealYear',''))}-{int(t.get('월', t.get('dealMonth','1'))):02d}-{int(t.get('일', t.get('dealDay','1'))):02d}",
-                    "price": int(float(t.get("거래금액", "0").replace(",", "")) * 10000),
-                    "area_m2": float(t.get("전용면적", 0) or 0),
-                    "floor_info": t.get("층"),
+                    "deal_date": f"{year}-{int(month):02d}-{int(day):02d}",
+                    "price": int(float(str(price_raw).replace(",", "")) * 10000),
+                    "area_m2": float(str(area_raw).replace(",", "") or 0),
+                    "floor_info": floor_info,
                     "raw_json": t,
                 }
             )
