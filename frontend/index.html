@@ -92,6 +92,7 @@ function dDay(dateStr) {
 }
 
 function showTab(name) {
+  if (name !== "upload") window.onpaste = null;
   dashboardEl.hidden = name !== "dashboard";
   uploadEl.hidden = name !== "upload";
   manageEl.hidden = name !== "manage";
@@ -245,10 +246,11 @@ async function loadUpload() {
           <option value="">(연결할 단지/구역 선택, 경매는 선택사항)</option>
           ${(targets || []).map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
         </select>
-        <input type="file" id="u-file" accept="image/*" required />
+        <input type="file" id="u-file" accept="image/*" />
+        <div id="paste-preview" class="muted" style="font-size:12px"></div>
         <button class="primary" type="submit">업로드</button>
       </form>
-      <p class="muted">업로드하면 다음 자동 실행(최대 30분 이내) 때 Claude Vision이 읽어서 자동으로 정리해요.</p>
+      <p class="muted">업로드하면 다음 자동 실행(최대 30분 이내) 때 Claude Vision이 읽어서 자동으로 정리해요. PC에서는 캡처한 직후 이 화면에서 <b>Ctrl+V</b>로 바로 붙여넣을 수 있어요.</p>
     </div>
     <div class="card">
       <h2>최근 업로드</h2>
@@ -262,13 +264,31 @@ async function loadUpload() {
     <button class="ghost" id="logout-upload">로그아웃</button>
   `;
 
+  let pastedBlob = null;
+
+  window.onpaste = (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        pastedBlob = item.getAsFile();
+        const url = URL.createObjectURL(pastedBlob);
+        document.getElementById("paste-preview").innerHTML =
+          `<img src="${url}" style="max-width:140px;border-radius:8px;border:1px solid var(--border);display:block;margin-top:6px" /> 클립보드 이미지 준비됨`;
+        e.preventDefault();
+        break;
+      }
+    }
+  };
+
   document.getElementById("upload-form").onsubmit = async (e) => {
     e.preventDefault();
-    const file = document.getElementById("u-file").files[0];
-    if (!file) return;
+    const file = pastedBlob || document.getElementById("u-file").files[0];
+    if (!file) { alert("이미지를 선택하거나 Ctrl+V로 붙여넣어 주세요."); return; }
     const kind = document.getElementById("u-kind").value;
     const targetId = document.getElementById("u-target").value || null;
-    const path = `uploads/${Date.now()}-${file.name}`;
+    const filename = pastedBlob ? `pasted-${Date.now()}.png` : file.name;
+    const path = `uploads/${Date.now()}-${filename}`;
 
     const { error: uploadError } = await supabase.storage.from("captures").upload(path, file);
     if (uploadError) { alert(uploadError.message); return; }
@@ -282,6 +302,7 @@ async function loadUpload() {
   };
 
   document.getElementById("logout-upload").onclick = async () => {
+    window.onpaste = null;
     await supabase.auth.signOut();
     loadUpload();
   };
