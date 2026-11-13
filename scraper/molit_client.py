@@ -13,11 +13,10 @@ from . import config
 
 BASE_URL = "http://apis.data.go.kr/1613000"
 
+# 아래 4개는 모두 data.go.kr의 오픈API 상세 페이지(Explore 탭)에서 Base URL을 직접 확인한 값.
 APT_ENDPOINT = f"{BASE_URL}/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
-VILLA_ENDPOINT = f"{BASE_URL}/RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade"
-# TODO: data.go.kr에서 "단독/다가구 매매 실거래가 자료" 활용신청 후 정확한 엔드포인트로 교체
+VILLA_ENDPOINT = f"{BASE_URL}/RTMSDataSvcRHTrade2/getRTMSDataSvcRHTrade2"
 HOUSE_ENDPOINT = f"{BASE_URL}/RTMSDataSvcSHTrade/getRTMSDataSvcSHTrade"
-# TODO: data.go.kr에서 "상업업무용 부동산 매매 신고 자료" 활용신청 후 정확한 엔드포인트로 교체
 COMMERCIAL_ENDPOINT = f"{BASE_URL}/RTMSDataSvcNrgTrade/getRTMSDataSvcNrgTrade"
 
 
