@@ -95,9 +95,13 @@ create policy "authenticated manage targets delete" on targets for delete using 
 
 -- listings/transactions/alerts 쓰기는 service_role 키(GitHub Actions)만 가능 (RLS 우회, 별도 정책 불필요)
 
--- 신규 Supabase 프로젝트(secret key 체계)는 service_role에 테이블 권한이 기본으로 안 붙어 있는 경우가 있어
--- 아래 GRANT를 안 하면 "permission denied for table ..." 에러가 납니다.
-grant usage on schema public to service_role;
+-- 신규 Supabase 프로젝트(새 API 키 체계)는 service_role/anon/authenticated 모두
+-- 테이블 권한이 기본으로 안 붙어 있는 경우가 있어, 이 GRANT를 안 하면
+-- "permission denied for table ..." 에러가 납니다 (RLS 정책과는 별개로 필요).
+grant usage on schema public to service_role, anon, authenticated;
 grant all on all tables in schema public to service_role;
 grant all on all sequences in schema public to service_role;
 alter default privileges in schema public grant all on tables to service_role;
+
+grant select on all tables in schema public to anon, authenticated;
+grant insert, update, delete on targets to authenticated;

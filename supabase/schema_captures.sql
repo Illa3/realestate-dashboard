@@ -42,8 +42,12 @@ create policy "authenticated insert captures" on captures for insert with check 
 create policy "public read auction items" on auction_items for select using (true);
 create policy "authenticated manage auction items" on auction_items for all using (auth.role() = 'authenticated');
 
+-- ALL TABLES 기준 GRANT는 실행 시점 기준이라 schema.sql 다음에 생긴 이 테이블들엔 안 걸려 있음 — 따로 부여
 grant all on captures to service_role;
 grant all on auction_items to service_role;
+grant select on captures, auction_items to anon, authenticated;
+grant insert on captures to authenticated;
+grant insert, update, delete on auction_items to authenticated;
 
 -- 캡처 이미지 저장용 비공개 버킷
 insert into storage.buckets (id, name, public)
