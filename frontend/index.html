@@ -38,6 +38,9 @@
   .status-pending { color: #b45309; }
   .status-processed { color: #15803d; }
   .status-error { color: var(--accent); }
+  details { margin-top: 6px; }
+  details summary { cursor: pointer; font-size: 13px; padding: 6px 0; color: var(--muted); border-top: 1px solid var(--border); }
+  details[open] summary { color: var(--text); }
 </style>
 </head>
 <body>
@@ -193,30 +196,27 @@ async function toggleTxSummary(targetId, btn) {
   el.innerHTML = `<p class="muted">불러오는 중...</p>`;
 
   const { data, error } = await supabase
-    .from("transactions").select("deal_date,price,area_m2")
+    .from("transactions").select("deal_date,price,area_m2,floor_info")
     .eq("target_id", targetId).order("deal_date", { ascending: false });
   if (error) { el.innerHTML = `<p class="alert">${error.message}</p>`; return; }
 
   const byMonth = {};
   (data || []).forEach(t => {
     const ym = t.deal_date.slice(0, 7);
-    byMonth[ym] ??= { count: 0, prices: [], perM2Sum: 0, perM2N: 0 };
-    byMonth[ym].count += 1;
-    byMonth[ym].prices.push(t.price);
-    if (t.area_m2 > 0) { byMonth[ym].perM2Sum += t.price / t.area_m2; byMonth[ym].perM2N += 1; }
+    (byMonth[ym] ??= []).push(t);
   });
   const months = Object.keys(byMonth).sort().reverse().slice(0, 6);
 
   const html = months.length
-    ? `<p class="muted" style="margin-top:8px">최근 6개월 실거래가</p>` + months.map(ym => {
-        const m = byMonth[ym];
-        const avgPerM2 = m.perM2N ? Math.round(m.perM2Sum / m.perM2N) : null;
-        return `
-          <div class="listing-row">
-            <span>${ym} (${m.count}건)${avgPerM2 ? ` · 평균 ㎡당 ${won(avgPerM2)}` : ""}</span>
-            <span>${won(Math.min(...m.prices))}~${won(Math.max(...m.prices))}</span>
-          </div>`;
-      }).join("")
+    ? `<p class="muted" style="margin-top:8px">최근 6개월 실거래가 (개별 건)</p>` + months.map(ym => `
+        <details>
+          <summary>${ym} (${byMonth[ym].length}건)</summary>
+          ${byMonth[ym].map(t => `
+            <div class="listing-row">
+              <span>${t.deal_date.slice(8, 10)}일 · ${t.area_m2 ? Math.round(t.area_m2 * 10) / 10 + "㎡" : "-"} · ${t.floor_info ? t.floor_info + "층" : "-"}</span>
+              <span>${won(t.price)}</span>
+            </div>`).join("")}
+        </details>`).join("")
     : `<p class="muted" style="margin-top:8px">실거래 데이터 없음</p>`;
 
   txCache[targetId] = html;
