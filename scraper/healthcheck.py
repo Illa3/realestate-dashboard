@@ -18,9 +18,9 @@ def run() -> None:
         print(f"   - {t['name']} ({t['type']}, lawd_cd={t['lawd_cd']})")
 
     if not targets:
-        print("   ⚠️ 0개입니다. schema.sql / seed_targets.sql을 실행했는지 확인하세요.")
+        print("   [경고] 0개입니다. schema.sql / seed_targets.sql을 실행했는지 확인하세요.")
     else:
-        print("✅ Supabase 연결 정상")
+        print("[OK] Supabase 연결 정상")
 
 
 if __name__ == "__main__":

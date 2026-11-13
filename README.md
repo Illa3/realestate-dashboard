@@ -24,7 +24,7 @@ GitHub Actions (30분 cron) → 스크래핑 → Supabase → 정적 프론트�
 3. SQL Editor에서 [supabase/schema.sql](supabase/schema.sql) 전체 실행
 4. 이어서 [config/seed_targets.sql](config/seed_targets.sql) 실행 (초기 6개 단지/구역 등록 — lawd_cd는 code.go.kr에서 확인 완료된 값)
 5. Authentication > Users에서 본인 계정 1개 생성 (관리 탭 로그인용)
-6. Settings > API에서 `Project URL`, `anon public key`, `service_role key` 복사
+6. Settings > API Keys에서 `Project URL`, publishable key(`sb_publishable_...`, 예전 anon key), secret key(`sb_secret_...`, 예전 service_role key) 복사 — 새로 만든 프로젝트는 새 키 체계라 이름이 다를 수 있음
 7. 로컬에 `.env` 만들고 (`.env.example` 복사) 값 채운 뒤 `pip install -r requirements.txt && python -m scraper.healthcheck` 실행해서 연결 확인
 
 ### 3. 텔레그램 봇 만들기
