@@ -15,6 +15,8 @@ BASE_URL = "http://apis.data.go.kr/1613000"
 
 APT_ENDPOINT = f"{BASE_URL}/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
 VILLA_ENDPOINT = f"{BASE_URL}/RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade"
+# TODO: data.go.kr에서 "단독/다가구 매매 실거래가 자료" 활용신청 후 정확한 엔드포인트로 교체
+HOUSE_ENDPOINT = f"{BASE_URL}/RTMSDataSvcSHTrade/getRTMSDataSvcSHTrade"
 # TODO: data.go.kr에서 "상업업무용 부동산 매매 신고 자료" 활용신청 후 정확한 엔드포인트로 교체
 COMMERCIAL_ENDPOINT = f"{BASE_URL}/RTMSDataSvcNrgTrade/getRTMSDataSvcNrgTrade"
 
@@ -53,6 +55,11 @@ def fetch_apt_trades(lawd_cd: str, deal_ymd: str) -> list[dict]:
 def fetch_villa_trades(lawd_cd: str, deal_ymd: str) -> list[dict]:
     """연립다세대 매매 실거래가 (재개발 구역 내 빌라류)."""
     return _fetch(VILLA_ENDPOINT, lawd_cd, deal_ymd)
+
+
+def fetch_house_trades(lawd_cd: str, deal_ymd: str) -> list[dict]:
+    """단독/다가구 매매 실거래가 (재개발 구역 내 단독·다가구·상가주택 등)."""
+    return _fetch(HOUSE_ENDPOINT, lawd_cd, deal_ymd)
 
 
 def fetch_commercial_trades(lawd_cd: str, deal_ymd: str) -> list[dict]:

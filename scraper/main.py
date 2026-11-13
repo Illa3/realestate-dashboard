@@ -135,27 +135,30 @@ def process_apartment_or_commercial(target: dict) -> None:
 def process_redevelopment(target: dict) -> None:
     deal_ymds = _recent_deal_ymds()
     trades: list[dict] = []
-    for ymd in deal_ymds:
-        try:
-            batch = molit_client.fetch_villa_trades(target["lawd_cd"], ymd)
-        except Exception as e:  # noqa: BLE001
-            print(f"[molit] {target['name']} {ymd} 조회 실패: {e}")
-            continue
-        trades.extend(batch)
-        for t in batch:
+    # 재개발구역은 빌라(연립다세대)와 단독/다가구(상가주택 포함)가 섞여 있어 둘 다 수집
+    sources = [("villa", molit_client.fetch_villa_trades), ("house", molit_client.fetch_house_trades)]
+    for source, fetch_fn in sources:
+        for ymd in deal_ymds:
             try:
-                db.insert_transaction(
-                    target["id"],
-                    "villa",
-                    {
-                        "deal_date": f"{t.get('년','2000')}-{int(t.get('월','1')):02d}-{int(t.get('일','1')):02d}",
-                        "price": int(float(t.get("거래금액", "0").replace(",", "")) * 10000),
-                        "area_m2": float(t.get("전용면적", 0) or 0),
-                        "raw_json": t,
-                    },
-                )
+                batch = fetch_fn(target["lawd_cd"], ymd)
             except Exception as e:  # noqa: BLE001
-                print(f"[molit] 거래 저장 실패: {e}")
+                print(f"[molit:{source}] {target['name']} {ymd} 조회 실패: {e}")
+                continue
+            trades.extend(batch)
+            for t in batch:
+                try:
+                    db.insert_transaction(
+                        target["id"],
+                        source,
+                        {
+                            "deal_date": f"{t.get('년','2000')}-{int(t.get('월','1')):02d}-{int(t.get('일','1')):02d}",
+                            "price": int(float(t.get("거래금액", "0").replace(",", "")) * 10000),
+                            "area_m2": float(t.get("전용면적", 0) or 0),
+                            "raw_json": t,
+                        },
+                    )
+                except Exception as e:  # noqa: BLE001
+                    print(f"[molit] 거래 저장 실패: {e}")
 
     # TODO: 북아현3구역처럼 단일 '단지'가 아닌 구역은 네이버 매물 수집 로직을 별도로 붙여야 함.
     # 지금은 실거래가만으로 시세 추이를 기록한다.

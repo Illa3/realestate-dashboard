@@ -50,7 +50,7 @@ create table if not exists listing_price_history (
 create table if not exists transactions (
   id uuid primary key default uuid_generate_v4(),
   target_id uuid not null references targets(id) on delete cascade,
-  source text not null check (source in ('apt', 'villa', 'commercial')),
+  source text not null check (source in ('apt', 'villa', 'house', 'commercial')),
   deal_date date not null,
   price bigint not null,
   area_m2 numeric,
