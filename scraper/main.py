@@ -90,6 +90,7 @@ def _to_rows(target_id: str, source: str, trades: list[dict]) -> list[dict]:
                 t, "전용면적", "excluUseAr", "totalFloorAr", "buildingAr", "plottageAr", "대지권면적", default=0
             )
             floor_info = _first(t, "층", "floor")
+            dong_info = _first(t, "동", "aptDong")  # 아파트(apt)만 제공, 그 외 소스는 null
 
             rows.append(
                 {
@@ -99,6 +100,7 @@ def _to_rows(target_id: str, source: str, trades: list[dict]) -> list[dict]:
                     "price": int(float(str(price_raw).replace(",", "")) * 10000),
                     "area_m2": float(str(area_raw).replace(",", "") or 0),
                     "floor_info": floor_info,
+                    "dong_info": dong_info,
                     "raw_json": t,
                 }
             )

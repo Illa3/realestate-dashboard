@@ -197,7 +197,7 @@ async function toggleTxSummary(targetId, btn, targetType) {
   el.innerHTML = `<p class="muted">불러오는 중...</p>`;
 
   const { data, error } = await supabase
-    .from("transactions").select("deal_date,price,area_m2,floor_info")
+    .from("transactions").select("deal_date,price,area_m2,floor_info,dong_info")
     .eq("target_id", targetId).order("deal_date", { ascending: false });
   if (error) { el.innerHTML = `<p class="alert">${error.message}</p>`; return; }
 
@@ -227,7 +227,7 @@ async function toggleTxSummary(targetId, btn, targetType) {
                   <summary>${ym} (${byMonth[ym].length}건)</summary>
                   ${byMonth[ym].map(t => `
                     <div class="listing-row">
-                      <span>${t.deal_date.slice(8, 10)}일 · ${t.floor_info ? t.floor_info + "층" : "-"}</span>
+                      <span>${t.deal_date.slice(8, 10)}일 · ${t.dong_info ? t.dong_info + "동 · " : ""}${t.floor_info ? t.floor_info + "층" : "-"}</span>
                       <span>${won(t.price)}</span>
                     </div>`).join("")}
                 </details>`).join("")}
