@@ -35,6 +35,30 @@ def _first(t: dict, *keys: str, default=None):
     return default
 
 
+def _cancel_key(t: dict) -> tuple:
+    return (
+        _first(t, "년", "dealYear"),
+        _first(t, "월", "dealMonth"),
+        _first(t, "일", "dealDay"),
+        _first(t, "거래금액", "dealAmount", "물건금액"),
+        _first(t, "전용면적", "excluUseAr", "totalFloorAr", "buildingAr", "plottageAr", "대지권면적"),
+        _first(t, "층", "floor"),
+        _first(t, "지번", "jibun"),
+    )
+
+
+def _drop_cancelled(trades: list[dict]) -> list[dict]:
+    """해제(취소)된 거래는 cdealType='O'로 표시된 행이 따로 들어오는데, 같은 거래의
+    정상 등록분까지 그대로 두면 실제로는 성사되지 않은 거래가 시세/급매 비교에 섞인다.
+    같은 거래 식별값(날짜·금액·면적·층·지번)을 가진 행을 통째로 제외한다."""
+    cancelled_keys = {
+        _cancel_key(t) for t in trades if _first(t, "해제여부", "cdealType", default="") == "O"
+    }
+    if not cancelled_keys:
+        return trades
+    return [t for t in trades if _cancel_key(t) not in cancelled_keys]
+
+
 def _matches_location(t: dict, target: dict) -> bool:
     """target에 apt_name/dong_name/jibun이 지정돼 있으면 그 단지(또는 동·지번) 거래만
     통과시킨다. LAWD_CD 조회는 구 전체를 가져오기 때문에 안 걸러내면 단지가 전혀
@@ -96,6 +120,7 @@ def process_apartment_or_commercial(target: dict) -> None:
         except Exception as e:  # noqa: BLE001
             print(f"[molit] {target['name']} {ymd} 조회 실패 ({time.monotonic()-t0:.1f}s): {e}")
             continue
+        batch = _drop_cancelled(batch)
         batch = [t for t in batch if _matches_location(t, target)]
         print(f"[molit] {target['name']} {ymd}: {len(batch)}건 ({time.monotonic()-t0:.1f}s)")
         rows.extend(_to_rows(target["id"], source, batch))
@@ -118,6 +143,7 @@ def process_redevelopment(target: dict) -> None:
             except Exception as e:  # noqa: BLE001
                 print(f"[molit:{source}] {target['name']} {ymd} 조회 실패 ({time.monotonic()-t0:.1f}s): {e}")
                 continue
+            batch = _drop_cancelled(batch)
             batch = [t for t in batch if _matches_location(t, target)]
             print(f"[molit:{source}] {target['name']} {ymd}: {len(batch)}건 ({time.monotonic()-t0:.1f}s)")
             rows.extend(_to_rows(target["id"], source, batch))
