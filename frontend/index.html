@@ -204,7 +204,7 @@ async function toggleTxSummary(targetId, btn, targetType) {
   let html;
   if (targetType === "apartment") {
     // 아파트는 단지 안에 전용면적(평형)이 여러 개 섞여 있어서, 같은 면적끼리 묶어야
-    // 가격을 비교하는 의미가 있다. 월별 대신 전용면적별로 그룹핑.
+    // 가격을 비교하는 의미가 있다. 전용면적으로 먼저 묶고, 그 안에서 다시 월별로 묶는다.
     const byArea = {};
     (data || []).forEach(t => {
       const key = t.area_m2 ? Math.round(t.area_m2) : 0;
@@ -212,15 +212,27 @@ async function toggleTxSummary(targetId, btn, targetType) {
     });
     const areas = Object.keys(byArea).map(Number).sort((a, b) => b - a);
     html = areas.length
-      ? `<p class="muted" style="margin-top:8px">최근 6개월 실거래가 (전용면적별)</p>` + areas.map(area => `
-          <details>
-            <summary>${area}㎡형 (${byArea[area].length}건)</summary>
-            ${byArea[area].map(t => `
-              <div class="listing-row">
-                <span>${t.deal_date} · ${t.floor_info ? t.floor_info + "층" : "-"}</span>
-                <span>${won(t.price)}</span>
-              </div>`).join("")}
-          </details>`).join("")
+      ? `<p class="muted" style="margin-top:8px">최근 6개월 실거래가 (전용면적별 · 월별)</p>` + areas.map(area => {
+          const byMonth = {};
+          byArea[area].forEach(t => {
+            const ym = t.deal_date.slice(0, 7);
+            (byMonth[ym] ??= []).push(t);
+          });
+          const months = Object.keys(byMonth).sort().reverse();
+          return `
+            <details>
+              <summary>${area}㎡형 (${byArea[area].length}건)</summary>
+              ${months.map(ym => `
+                <details style="margin-left:14px">
+                  <summary>${ym} (${byMonth[ym].length}건)</summary>
+                  ${byMonth[ym].map(t => `
+                    <div class="listing-row">
+                      <span>${t.deal_date.slice(8, 10)}일 · ${t.floor_info ? t.floor_info + "층" : "-"}</span>
+                      <span>${won(t.price)}</span>
+                    </div>`).join("")}
+                </details>`).join("")}
+            </details>`;
+        }).join("")
       : `<p class="muted" style="margin-top:8px">실거래 데이터 없음</p>`;
   } else {
     const byMonth = {};
